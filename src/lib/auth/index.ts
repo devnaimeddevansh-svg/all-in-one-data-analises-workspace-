@@ -4,7 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { createOrganizationForUser } from "@/lib/org";
+import { ensureOrganizationForUser } from "@/lib/org";
 import { authConfig } from "./config";
 
 const providers = [];
@@ -15,6 +15,13 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          prompt: "select_account",
+          access_type: "online",
+          response_type: "code",
+        },
+      },
     })
   );
 }
@@ -30,7 +37,7 @@ providers.push(
       if (!credentials?.email || !credentials?.password) return null;
 
       const user = await db.user.findUnique({
-        where: { email: credentials.email as string },
+        where: { email: (credentials.email as string).toLowerCase().trim() },
       });
 
       if (!user?.passwordHash) return null;
@@ -41,7 +48,9 @@ providers.push(
       );
       if (!valid) return null;
 
-      if (!user.emailVerified) {
+      const requireVerification =
+        process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true";
+      if (requireVerification && !user.emailVerified) {
         throw new Error("EMAIL_NOT_VERIFIED");
       }
 
@@ -52,38 +61,36 @@ providers.push(
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  secret: process.env.NEXTAUTH_SECRET,
   adapter: PrismaAdapter(db),
   providers,
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user, account }) {
-      if (account?.provider === "google" && user.id) {
-        const membership = await db.membership.findFirst({
-          where: { userId: user.id },
-        });
-        if (!membership) {
-          await createOrganizationForUser(user.id, user.name ?? "My Workspace");
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google") {
+        const googleProfile = profile as { email_verified?: boolean } | undefined;
+        if (googleProfile?.email_verified === false) {
+          return "/login?error=EmailNotVerified";
         }
-        const dbUser = await db.user.findUnique({ where: { id: user.id } });
-        if (dbUser && !dbUser.emailVerified) {
+      }
+
+      if (user.id) {
+        await ensureOrganizationForUser(user.id, user.name ?? "My Workspace");
+        if (account?.provider === "google") {
           await db.user.update({
             where: { id: user.id },
             data: { emailVerified: new Date() },
           });
         }
       }
+
       return true;
     },
   },
   events: {
     async createUser({ user }) {
       if (user.id) {
-        const existing = await db.membership.findFirst({
-          where: { userId: user.id },
-        });
-        if (!existing) {
-          await createOrganizationForUser(user.id, user.name ?? "My Workspace");
-        }
+        await ensureOrganizationForUser(user.id, user.name ?? "My Workspace");
       }
     },
   },

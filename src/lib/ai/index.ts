@@ -1,27 +1,14 @@
 import type { AIProvider, AIProviderName } from "./types";
-import { OpenAIProvider } from "./providers/openai";
-import { AnthropicProvider } from "./providers/anthropic";
-import { GeminiProvider } from "./providers/gemini";
+import { GroqProvider } from "./providers/groq";
 
 export function getAIProvider(name?: AIProviderName): AIProvider {
-  const provider = name ?? (process.env.AI_PROVIDER as AIProviderName) ?? "openai";
-
-  switch (provider) {
-    case "openai":
-      return new OpenAIProvider();
-    case "anthropic":
-      return new AnthropicProvider();
-    case "gemini":
-      return new GeminiProvider();
-    default:
-      throw new Error(`Unknown AI provider: ${provider}`);
-  }
+  const provider = name ?? (process.env.AI_PROVIDER as AIProviderName) ?? "groq";
+  if (provider === "groq") return new GroqProvider();
+  throw new Error(
+    `Unsupported AI provider "${provider}". Set AI_PROVIDER=groq and configure GROQ_API_KEY.`
+  );
 }
 
 export function getAvailableProviders(): AIProviderName[] {
-  const available: AIProviderName[] = [];
-  if (process.env.OPENAI_API_KEY) available.push("openai");
-  if (process.env.ANTHROPIC_API_KEY) available.push("anthropic");
-  if (process.env.GEMINI_API_KEY) available.push("gemini");
-  return available;
+  return process.env.GROQ_API_KEY ? ["groq"] : [];
 }

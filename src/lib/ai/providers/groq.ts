@@ -1,21 +1,28 @@
 import OpenAI from "openai";
 import type { AIProvider, ChatParams, ChatResponse } from "../types";
 
-export class OpenAIProvider implements AIProvider {
-  name = "openai" as const;
+/**
+ * Groq inference provider (OpenAI-compatible API).
+ * https://console.groq.com/docs/openai
+ */
+export class GroqProvider implements AIProvider {
+  name = "groq" as const;
   private client: OpenAI;
   private model: string;
-  private embeddingModel: string;
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY is required");
-    this.client = new OpenAI({ apiKey });
-    this.model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-    this.embeddingModel = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error("GROQ_API_KEY is required");
+    this.client = new OpenAI({
+      apiKey,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
+    this.model = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
   }
 
-  private toOpenAIMessages(messages: ChatParams["messages"]): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  private toOpenAIMessages(
+    messages: ChatParams["messages"]
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     return messages.map((m) => {
       if (m.role === "tool") {
         return {
@@ -53,14 +60,16 @@ export class OpenAIProvider implements AIProvider {
     });
 
     const choice = response.choices[0];
-    const toolCalls = choice.message.tool_calls?.map((tc) => {
-      if (tc.type !== "function") return null;
-      return {
-        id: tc.id,
-        name: tc.function.name,
-        arguments: JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>,
-      };
-    }).filter((tc): tc is NonNullable<typeof tc> => tc !== null);
+    const toolCalls = choice.message.tool_calls
+      ?.map((tc) => {
+        if (tc.type !== "function") return null;
+        return {
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>,
+        };
+      })
+      .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
 
     return {
       content: choice.message.content ?? "",
@@ -76,10 +85,7 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async embed(text: string): Promise<number[]> {
-    const response = await this.client.embeddings.create({
-      model: this.embeddingModel,
-      input: text,
-    });
-    return response.data[0].embedding;
+    const { embedText } = await import("../embeddings");
+    return embedText(text);
   }
 }

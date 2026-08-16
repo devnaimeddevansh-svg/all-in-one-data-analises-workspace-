@@ -9,18 +9,23 @@ function getResend(): Resend | null {
   return resend;
 }
 
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
 const FROM_EMAIL = process.env.EMAIL_FROM ?? "NexusOS <onboarding@resend.dev>";
 
 export async function sendVerificationEmail(
   email: string,
   token: string
-): Promise<void> {
-  const url = `${process.env.NEXTAUTH_URL}/verify-email?token=${token}`;
+): Promise<string | undefined> {
+  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const url = `${baseUrl}/verify-email?token=${token}`;
   const client = getResend();
 
   if (!client) {
-    console.log(`[DEV] Verification email for ${email}: ${url}`);
-    return;
+    console.log(`[NexusOS] Verification link for ${email}: ${url}`);
+    return url;
   }
 
   await client.emails.send({
@@ -34,18 +39,20 @@ export async function sendVerificationEmail(
       <p>This link expires in 24 hours.</p>
     `,
   });
+  return undefined;
 }
 
 export async function sendPasswordResetEmail(
   email: string,
   token: string
-): Promise<void> {
-  const url = `${process.env.NEXTAUTH_URL}/reset-password?token=${token}`;
+): Promise<string | undefined> {
+  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const url = `${baseUrl}/reset-password?token=${token}`;
   const client = getResend();
 
   if (!client) {
-    console.log(`[DEV] Password reset for ${email}: ${url}`);
-    return;
+    console.log(`[NexusOS] Password reset link for ${email}: ${url}`);
+    return url;
   }
 
   await client.emails.send({
@@ -59,4 +66,5 @@ export async function sendPasswordResetEmail(
       <p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>
     `,
   });
+  return undefined;
 }

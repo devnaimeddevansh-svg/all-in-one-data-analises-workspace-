@@ -15,10 +15,17 @@ export async function getUserOrganization(userId: string) {
   return membership;
 }
 
-export async function createOrganizationForUser(
-  userId: string,
-  name: string
-) {
+export async function ensureOrganizationForUser(userId: string, name: string) {
+  const existing = await db.membership.findFirst({
+    where: { userId },
+    include: { organization: { include: { subscription: true } } },
+  });
+  if (existing) return existing.organization;
+
+  return createOrganizationForUser(userId, name);
+}
+
+export async function createOrganizationForUser(userId: string, name: string) {
   const baseSlug = slugify(name) || "workspace";
   let slug = baseSlug;
   let attempt = 0;
