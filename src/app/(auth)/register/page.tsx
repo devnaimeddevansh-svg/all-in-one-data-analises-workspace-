@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,39 +16,53 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setVerificationUrl(null);
 
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
+    const normalizedEmail = email.toLowerCase().trim();
+
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: normalizedEmail,
+          password,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Registration failed");
+        setLoading(false);
+        return;
+      }
+
+      // Auto sign-in immediately after successful registration
+      const signInResult = await signIn("credentials", {
+        email: normalizedEmail,
         password,
-      }),
-    });
-    const data = await res.json();
+        redirect: false,
+      });
 
-    if (!res.ok) {
-      setError(data.error || "Registration failed");
+      if (signInResult?.ok) {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+
+      // Fallback: send to login if auto sign-in fails
+      router.push("/login?registered=true");
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (data.verificationUrl) {
-      setVerificationUrl(data.verificationUrl);
-      setLoading(false);
-      return;
-    }
-
-    router.push("/login?registered=true");
   }
 
   return (
@@ -58,67 +73,50 @@ export default function RegisterPage() {
             <Sparkles className="h-6 w-6 text-violet-500" />
           </div>
           <CardTitle>Create your account</CardTitle>
-          <CardDescription>Start your AI Operating System journey</CardDescription>
+          <CardDescription>Get started with NexusOS in seconds</CardDescription>
         </CardHeader>
         <CardContent>
-          {verificationUrl ? (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-violet-500/10 p-3 text-sm text-violet-300">
-                Email delivery is not configured. Use this link to verify your account:
-              </div>
-              <a
-                href={verificationUrl}
-                className="block break-all text-sm text-violet-400 underline"
-              >
-                {verificationUrl}
-              </a>
-              <Link href="/login">
-                <Button className="w-full">Go to sign in</Button>
-              </Link>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={8}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating..." : "Create account"}
-              </Button>
-            </form>
-          )}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating account..." : "Create account & sign in"}
+            </Button>
+          </form>
           <p className="mt-4 text-center text-sm text-zinc-400">
             Already have an account?{" "}
             <Link href="/login" className="text-violet-400 hover:underline">

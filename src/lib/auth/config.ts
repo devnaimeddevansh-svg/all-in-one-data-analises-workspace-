@@ -1,110 +1,38 @@
 import type { NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
 
-const providers: NextAuthConfig["providers"] = [
-  Credentials({
-    name: "credentials",
-    credentials: {
-      email: { label: "Email", type: "email" },
-      password: { label: "Password", type: "password" },
-    },
-    async authorize() {
-      return null;
-    },
-  }),
-];
+export const authSecret =
+  process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "";
 
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  providers.unshift(
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      authorization: {
-        params: {
-          prompt: "consent",
-          access_type: "offline",
-          response_type: "code",
-        },
-      },
-    })
-  );
-}
-
-export const authConfig: NextAuthConfig = {
-  providers,
+export const authConfig = {
+  secret: authSecret,
+  providers: [],
   trustHost: true,
   pages: {
     signIn: "/login",
     error: "/login",
   },
-  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-authjs.session-token"
-          : "authjs.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-    callbackUrl: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-authjs.callback-url"
-          : "authjs.callback-url",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-    csrfToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Host-authjs.csrf-token"
-          : "authjs.csrf-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
+  session: {
+    strategy: "jwt" as const,
+    maxAge: 30 * 24 * 60 * 60,
   },
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-      const isDashboard = nextUrl.pathname.startsWith("/dashboard");
-      const isAuthPage =
-        nextUrl.pathname.startsWith("/login") ||
-        nextUrl.pathname.startsWith("/register");
-
-      if (isDashboard) return isLoggedIn;
-      if (isAuthPage && isLoggedIn) {
-        return Response.redirect(new URL("/dashboard", nextUrl));
-      }
-      return true;
-    },
     async jwt({ token, user, trigger, session }) {
-      if (user) {
+      if (user?.id) {
         token.id = user.id;
       }
-      if (trigger === "update" && session) {
+      if (trigger === "update" && session?.name) {
         token.name = session.name;
       }
       return token;
     },
     async session({ session, token }) {
-      if (token?.id) {
+      if (token?.id && session.user) {
         session.user.id = token.id as string;
+      }
+      if (token?.name) {
+        session.user.name = token.name as string;
       }
       return session;
     },
   },
-};
+} satisfies NextAuthConfig;

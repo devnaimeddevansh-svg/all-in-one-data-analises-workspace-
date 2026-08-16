@@ -11,12 +11,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const ERROR_MESSAGES: Record<string, string> = {
+  CredentialsSignin: "Invalid email or password. Please try again or create a new account.",
   OAuthSignin: "Google sign-in could not be started. Check OAuth configuration.",
   OAuthCallback: "Google sign-in failed. Ensure NEXTAUTH_URL matches your deployed URL.",
   OAuthAccountNotLinked:
-    "This email is already registered. Sign in with email/password first, then link Google from Settings.",
-  EmailNotVerified: "Your Google email is not verified.",
-  Configuration: "Auth is misconfigured. Contact support.",
+    "This email is already registered with a password. Sign in with email/password instead.",
+  Configuration: "Server auth is misconfigured (missing NEXTAUTH_SECRET).",
   Default: "Sign-in failed. Please try again.",
 };
 
@@ -37,24 +37,33 @@ function LoginForm() {
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email: email.toLowerCase().trim(),
-      password,
-      redirect: false,
-    });
+    const normalizedEmail = email.toLowerCase().trim();
 
-    if (result?.error) {
-      setError(
-        result.error === "EMAIL_NOT_VERIFIED"
-          ? "Please verify your email before signing in."
-          : "Invalid email or password"
-      );
+    try {
+      const result = await signIn("credentials", {
+        email: normalizedEmail,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.Default);
+        setLoading(false);
+        return;
+      }
+
+      if (result?.ok) {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+
+      setError("Sign-in failed. Please try again.");
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   async function handleGoogleSignIn() {
@@ -75,7 +84,7 @@ function LoginForm() {
       <CardContent className="space-y-4">
         {registered && (
           <div className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-400">
-            Account created. You can sign in now.
+            Account created. Sign in with your email and password.
           </div>
         )}
         {oauthError && (
@@ -143,14 +152,6 @@ function LoginForm() {
             Create account
           </Link>
         </div>
-
-        <p className="text-center text-xs text-zinc-500">
-          By signing in you agree to our{" "}
-          <Link href="/privacy" className="underline hover:text-violet-400">
-            Privacy Policy
-          </Link>
-          .
-        </p>
       </CardContent>
     </Card>
   );

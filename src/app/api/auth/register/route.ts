@@ -13,15 +13,9 @@ const schema = z.object({
   password: z.string().min(8).max(128),
 });
 
-function shouldAutoVerifyEmail(): boolean {
-  if (process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true") return false;
-  if (process.env.AUTH_AUTO_VERIFY === "true") return true;
-  return !isEmailConfigured();
-}
-
 export async function POST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const { success } = await rateLimit(`register:${ip}`, 5);
+  const { success } = await rateLimit(`register:${ip}`, 10);
   if (!success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
@@ -30,7 +24,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const data = schema.parse(body);
     const email = data.email.toLowerCase().trim();
-    const autoVerify = shouldAutoVerifyEmail();
 
     const existing = await db.user.findUnique({ where: { email } });
     if (existing) {
@@ -44,33 +37,17 @@ export async function POST(request: Request) {
         name: data.name.trim(),
         email,
         passwordHash,
-        emailVerified: autoVerify ? new Date() : undefined,
+        emailVerified: new Date(),
       },
     });
 
     await ensureOrganizationForUser(user.id, data.name.trim());
-
-    let verificationUrl: string | undefined;
-    if (!autoVerify) {
-      const token = crypto.randomUUID();
-      await db.verificationToken.create({
-        data: {
-          identifier: email,
-          token,
-          expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        },
-      });
-      verificationUrl = await sendVerificationEmail(email, token);
-    }
-
     await createAuditLog({ userId: user.id, action: "user.register", ipAddress: ip });
 
     return NextResponse.json({
-      message: autoVerify
-        ? "Account created. You can sign in now."
-        : "Account created. Please check your email to verify.",
-      autoVerified: autoVerify,
-      ...(verificationUrl && !isEmailConfigured() ? { verificationUrl } : {}),
+      message: "Account created successfully.",
+      autoVerified: true,
+      email,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -78,9 +55,15 @@ export async function POST(request: Request) {
     }
     console.error("Register error:", error);
     const message =
-      error instanceof Error && process.env.NODE_ENV === "development"
-        ? error.message
-        : "Registration failed. Please check database configuration and try again.";
-    return NextResponse.json({ error: message }, { status: 500 });
+      error instanceof Error ? error.message : "Registration failed";
+    return NextResponse.json(
+      {
+        error:
+          process.env.NODE_ENV === "development"
+            ? `Registration failed: ${message}`
+            : "Registration failed. Check database connection and try again.",
+      },
+      { status: 500 }
+    );
   }
 }
