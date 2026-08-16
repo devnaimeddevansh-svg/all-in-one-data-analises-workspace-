@@ -103,6 +103,18 @@ export async function runResearchSync(projectId: string): Promise<void> {
   });
 }
 
+export async function enqueueAgentRun(runId: string): Promise<boolean> {
+  if (!(await isRedisAvailable())) return false;
+  const queue = getQueue(QUEUE_NAMES.AGENT_RUN);
+  await queue.add("agent-run", { runId }, { attempts: 2 });
+  return true;
+}
+
+export async function runAgentRunSync(runId: string): Promise<void> {
+  const { runAgentOrchestrator } = await import("@/lib/ai/agent-orchestrator");
+  await runAgentOrchestrator(runId);
+}
+
 export function startWorkers(): void {
   if (process.env.NODE_ENV === "test") return;
   // Workers only start when Redis is available

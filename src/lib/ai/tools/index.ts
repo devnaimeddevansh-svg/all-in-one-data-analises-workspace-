@@ -65,6 +65,24 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ["action"],
     },
   },
+  {
+    name: "create_task",
+    description: "Create a follow-up task in the task manager",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Task title" },
+        description: { type: "string", description: "Task description" },
+        priority: {
+          type: "string",
+          enum: ["LOW", "MEDIUM", "HIGH", "URGENT"],
+          description: "Task priority",
+        },
+        dueDate: { type: "string", description: "Due date ISO string" },
+      },
+      required: ["title"],
+    },
+  },
 ];
 
 export interface ToolContext {
@@ -116,6 +134,19 @@ export async function executeTool(
         details: args.details,
         message: "This action requires human approval before proceeding.",
       });
+    }
+    case "create_task": {
+      const task = await db.task.create({
+        data: {
+          organizationId: context.organizationId,
+          userId: context.userId,
+          title: args.title as string,
+          description: (args.description as string) ?? undefined,
+          priority: (args.priority as "LOW" | "MEDIUM" | "HIGH" | "URGENT") ?? "MEDIUM",
+          dueDate: args.dueDate ? new Date(args.dueDate as string) : undefined,
+        },
+      });
+      return `Task created: ${task.id}`;
     }
     default:
       return `Unknown tool: ${name}`;

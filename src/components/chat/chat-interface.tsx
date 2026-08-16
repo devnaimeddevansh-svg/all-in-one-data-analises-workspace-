@@ -1,15 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+
+export interface ChatSource {
+  chunkId: string;
+  documentId: string;
+  documentName: string;
+  excerpt: string;
+  similarity: number;
+}
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  sources?: ChatSource[];
 }
 
 interface ChatInterfaceProps {
@@ -17,6 +26,9 @@ interface ChatInterfaceProps {
   onConversationCreated?: (id: string) => void;
   placeholder?: string;
   className?: string;
+  apiEndpoint?: string;
+  historyEndpoint?: string;
+  showSources?: boolean;
 }
 
 export function ChatInterface({
@@ -24,6 +36,9 @@ export function ChatInterface({
   onConversationCreated,
   placeholder = "What do you want to accomplish?",
   className,
+  apiEndpoint = "/api/chat",
+  historyEndpoint,
+  showSources = false,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -31,16 +46,28 @@ export function ChatInterface({
   const [conversationId, setConversationId] = useState(initialConversationId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const historyUrl = historyEndpoint ?? (conversationId ? `/api/chat/${conversationId}` : null);
+
   useEffect(() => {
-    if (initialConversationId) {
-      fetch(`/api/chat/${initialConversationId}`)
+    if (initialConversationId && historyEndpoint !== null) {
+      const url = historyEndpoint ?? `/api/chat/${initialConversationId}`;
+      fetch(url)
         .then((r) => r.json())
         .then((data) => {
-          if (data.messages) setMessages(data.messages);
+          if (data.messages) {
+            setMessages(
+              data.messages.map((m: { id: string; role: string; content: string; metadata?: { sources?: ChatSource[] } }) => ({
+                id: m.id,
+                role: m.role as "user" | "assistant",
+                content: m.content,
+                sources: m.metadata?.sources,
+              }))
+            );
+          }
         })
         .catch(console.error);
     }
-  }, [initialConversationId]);
+  }, [initialConversationId, historyEndpoint]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,7 +86,7 @@ export function ChatInterface({
     setLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMessage, conversationId }),
@@ -75,7 +102,12 @@ export function ChatInterface({
 
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", content: data.content },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.content,
+          sources: showSources ? data.sources : undefined,
+        },
       ]);
     } catch (error) {
       setMessages((prev) => [
@@ -100,16 +132,34 @@ export function ChatInterface({
           </div>
         )}
         {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn(
-              "max-w-[85%] rounded-xl px-4 py-3 text-sm",
-              msg.role === "user"
-                ? "ml-auto bg-violet-600 text-white"
-                : "bg-zinc-800 text-zinc-100"
+          <div key={msg.id} className={cn("max-w-[90%]", msg.role === "user" ? "ml-auto" : "")}>
+            <div
+              className={cn(
+                "rounded-xl px-4 py-3 text-sm",
+                msg.role === "user"
+                  ? "bg-violet-600 text-white"
+                  : "bg-zinc-800 text-zinc-100"
+              )}
+            >
+              <div className="whitespace-pre-wrap">{msg.content}</div>
+            </div>
+            {showSources && msg.sources && msg.sources.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-zinc-500 font-medium">Sources</p>
+                {msg.sources.map((src, i) => (
+                  <div
+                    key={src.chunkId}
+                    className="flex items-start gap-2 text-xs text-zinc-400 bg-zinc-900 rounded-lg p-2"
+                  >
+                    <FileText className="h-3 w-3 mt-0.5 shrink-0 text-violet-400" />
+                    <div>
+                      <span className="text-violet-400 font-medium">[{i + 1}] {src.documentName}</span>
+                      <p className="text-zinc-500 mt-0.5 line-clamp-2">{src.excerpt}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          >
-            <div className="whitespace-pre-wrap">{msg.content}</div>
           </div>
         ))}
         {loading && (
