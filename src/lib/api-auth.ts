@@ -1,18 +1,18 @@
-import { auth } from "@/lib/auth";
+import { getGuestFromCookie } from "@/lib/guest";
 import { getUserOrganization } from "@/lib/org";
 import { rateLimit } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 
 export async function getSessionUser() {
-  const session = await auth();
-  if (!session?.user?.id) return null;
-  return session.user;
+  const guest = await getGuestFromCookie();
+  if (!guest) return null;
+  return guest;
 }
 
 export async function requireAuth() {
   const user = await getSessionUser();
   if (!user) {
-    throw new AuthError("Unauthorized", 401);
+    throw new AuthError("No guest session", 401);
   }
   return user;
 }

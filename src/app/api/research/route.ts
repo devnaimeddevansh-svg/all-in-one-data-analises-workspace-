@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAuthWithOrg, handleApiError } from "@/lib/api-auth";
 import { checkResearchLimit, incrementResearchProjects } from "@/lib/usage/tracker";
-import { enqueueResearch } from "@/lib/queue";
+import { enqueueResearch, runResearchSync } from "@/lib/queue";
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
@@ -48,33 +48,17 @@ export async function POST(request: Request) {
 
     await incrementResearchProjects(organization.id);
 
-    try {
-      await enqueueResearch(project.id);
-    } catch {
-      const { runResearchOrchestrator } = await import("@/lib/ai/orchestrator");
-      const result = await runResearchOrchestrator({
-        organizationId: organization.id,
-        userId: user.id,
-        query,
-      });
-
-      await db.researchReport.create({
-        data: {
-          researchProjectId: project.id,
-          title: result.title,
-          content: result.content,
-          sources: result.sources,
-          recommendations: result.recommendations,
-        },
-      });
-
-      await db.researchProject.update({
-        where: { id: project.id },
-        data: { status: "COMPLETED" },
-      });
+    const queued = await enqueueResearch(project.id);
+    if (!queued) {
+      await runResearchSync(project.id);
     }
 
-    return NextResponse.json({ project }, { status: 201 });
+    const updated = await db.researchProject.findUnique({
+      where: { id: project.id },
+      include: { reports: true },
+    });
+
+    return NextResponse.json({ project: updated }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

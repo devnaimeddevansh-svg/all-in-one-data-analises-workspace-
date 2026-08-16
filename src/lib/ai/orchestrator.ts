@@ -3,7 +3,7 @@ import { TOOL_DEFINITIONS, executeTool, type ToolContext } from "@/lib/ai/tools"
 import type { ChatMessage } from "@/lib/ai/types";
 import { incrementAiTasks } from "@/lib/usage/tracker";
 
-const SYSTEM_PROMPT = `You are NexusOS, an AI Operating System that helps users accomplish goals through research, analysis, planning, and execution.
+const SYSTEM_PROMPT_WITH_TOOLS = `You are NexusOS, an AI Operating System that helps users accomplish goals through research, analysis, planning, and execution.
 
 You have access to tools for web search, memory, document search, and human approval for consequential actions.
 
@@ -15,6 +15,15 @@ When helping users:
 5. Request human approval before any consequential external actions
 
 Be concise, insightful, and proactive. Format responses with clear structure using markdown.`;
+
+const SYSTEM_PROMPT_NO_TOOLS = `You are NexusOS, an AI Operating System that helps users accomplish goals through research, analysis, planning, and execution.
+
+When helping users:
+1. Understand their goal clearly
+2. Provide thoughtful analysis and actionable recommendations
+3. Use clear structure with markdown headings and lists when helpful
+
+Be concise, insightful, and proactive.`;
 
 export interface OrchestratorParams {
   organizationId: string;
@@ -37,13 +46,18 @@ export async function runOrchestrator(
   params: OrchestratorParams
 ): Promise<OrchestratorResult> {
   const provider = getAIProvider();
+  const toolsEnabled =
+    params.enableTools !== false && provider.name !== "groq";
   const context: ToolContext = {
     organizationId: params.organizationId,
     userId: params.userId,
   };
 
   const messages: ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: toolsEnabled ? SYSTEM_PROMPT_WITH_TOOLS : SYSTEM_PROMPT_NO_TOOLS,
+    },
     ...(params.conversationHistory ?? []),
     { role: "user", content: params.message },
   ];
@@ -55,7 +69,7 @@ export async function runOrchestrator(
   for (let i = 0; i < maxIterations; i++) {
     const response = await provider.chat({
       messages,
-      tools: params.enableTools !== false ? TOOL_DEFINITIONS : undefined,
+      tools: toolsEnabled ? TOOL_DEFINITIONS : undefined,
     });
 
     await incrementAiTasks(params.organizationId);

@@ -1,34 +1,35 @@
-import { middlewareAuth } from "@/lib/auth/middleware";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export default middlewareAuth((req) => {
-  const isLoggedIn = !!req.auth;
-  const pathname = req.nextUrl.pathname;
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
-  const isAuthPage =
+  // Auto-create guest session for dashboard routes
+  if (pathname.startsWith("/dashboard") && !request.cookies.get("nexusos_guest")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/api/guest/init";
+    url.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Root → dashboard
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Old auth pages → dashboard
+  if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/register") ||
     pathname.startsWith("/forgot-password") ||
-    pathname.startsWith("/reset-password") ||
-    pathname.startsWith("/verify-email");
-
-  if (pathname.startsWith("/dashboard") && !isLoggedIn) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+    pathname.startsWith("/reset-password")
+  ) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (isAuthPage && isLoggedIn) {
-    return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
-  }
-});
+  return NextResponse.next();
+}
 
 export const config = {
-  matcher: [
-    "/dashboard/:path*",
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/reset-password",
-    "/verify-email",
-    "/privacy",
-  ],
+  matcher: ["/", "/dashboard/:path*", "/login", "/register", "/forgot-password", "/reset-password"],
 };
