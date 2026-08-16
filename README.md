@@ -61,8 +61,9 @@ NEXTAUTH_SECRET=<run: openssl rand -base64 32>
 ENCRYPTION_KEY=<run: openssl rand -hex 32>
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nexusos?schema=public
 REDIS_URL=redis://localhost:6379
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
+AI_PROVIDER=groq
+GROQ_API_KEY=your-groq-api-key
+GROQ_MODEL=llama-3.3-70b-versatile
 S3_BUCKET=nexusos
 S3_ACCESS_KEY_ID=minioadmin
 S3_SECRET_ACCESS_KEY=minioadmin
