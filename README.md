@@ -5,7 +5,7 @@ NexusOS is a production-ready SaaS platform that unifies AI research, business i
 ## Features (Phase 1)
 
 - **Authentication** — Email/password, Google OAuth, email verification, password reset, secure sessions, account deletion
-- **AI Chat** — Unified home input with multi-provider AI (OpenAI, Anthropic, Gemini)
+- **AI Chat** — Unified home input powered by Groq (Llama 3.3)
 - **Research Analyst** — Web search, source citations, reports, and recommendations
 - **Memory** — Persistent vector-based memory with semantic search (pgvector)
 - **Business Brain** — Document upload, chunking, embedding, and RAG search
@@ -118,9 +118,15 @@ Subscription status is **only** updated from verified Stripe webhooks — never 
 
 ## AI Provider Configuration
 
-Set `AI_PROVIDER` to one of: `openai`, `anthropic`, `gemini`
+NexusOS uses **Groq** for fast LLM inference.
 
-Configure the corresponding API key(s). Embeddings fall back to OpenAI when using Anthropic.
+```env
+AI_PROVIDER=groq
+GROQ_API_KEY=your-key-from-console.groq.com
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+Memory and document search use local embeddings when no cloud embedding API is configured.
 
 For web search in Research, configure `TAVILY_API_KEY` (get one at https://tavily.com).
 
